@@ -44,6 +44,7 @@ enum HttpResponseBody {
     }
 }
 
+// 定义一个 HTTP Response 枚举类型
 enum HttpResponse {
     
     case OK(HttpResponseBody), Created, Accepted
@@ -82,6 +83,8 @@ enum HttpResponse {
         }
     }
     
+    // 当枚举类型是 .MovedPermanently 的时候，设置 header 的 Location 信息
+    // 其他情况下不做任何处理
     func headers() -> Dictionary<String, String> {
         switch self {
         case .MovedPermanently(let location) : return [ "Location" : location ]
@@ -89,6 +92,7 @@ enum HttpResponse {
         }
     }
     
+    // 当请求成功的时候，返回响应的数据
     func body() -> String? {
         switch self {
         case .OK(let body)      : return body.data()

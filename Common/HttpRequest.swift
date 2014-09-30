@@ -8,6 +8,7 @@
 
 import Foundation
 
+// HttpRequest 结构体，定义了 HTTP 请求的地址，方法名， header 信息，和请求返回数据
 struct HttpRequest {
     let url: String
     let method: String
