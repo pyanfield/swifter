@@ -15,9 +15,9 @@ struct Socket {
     static func socketLastError(reason:String) -> NSError {
         let errorCode = errno
         if let errorText = String.fromCString(UnsafePointer(strerror(errorCode))) {
-            return NSError.errorWithDomain("SOCKET", code: Int(errorCode), userInfo: [NSLocalizedFailureReasonErrorKey : reason, NSLocalizedDescriptionKey : errorText])
+            return NSError(domain: "SOCKET", code: Int(errorCode), userInfo: [NSLocalizedFailureReasonErrorKey : reason, NSLocalizedDescriptionKey : errorText])
         }
-        return NSError.errorWithDomain("SOCKET", code: Int(errorCode), userInfo: nil)
+        return NSError(domain: "SOCKET", code: Int(errorCode), userInfo: nil)
     }
     
     // 建立 socket 连接，监听 port 端口

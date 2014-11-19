@@ -10,7 +10,7 @@ import Foundation
 class HttpParser {
     
     class func err(reason:String) -> NSError {
-        return NSError.errorWithDomain("HTTP_PARSER", code: 0, userInfo:[NSLocalizedFailureReasonErrorKey : reason])
+        return NSError(domain: "HTTP_PARSER", code: 0, userInfo:[NSLocalizedFailureReasonErrorKey : reason])
     }
 
     // 获取 HTTP 的请求地址，请求方法，请求的header ，和返回数据的信息，然后返回 HttpRequest 结构体
@@ -27,24 +27,23 @@ class HttpParser {
             let path = statusTokens[1]
             if let headers = nextHeaders(socket, error: error) {
                 println(">> headers : \(headers)")
-                var responseString = ""
-                while let line = nextLine(socket, error: error)
-                {
+                var requestBody = ""
+                while let line = nextLine(socket, error: error) {
                     if line.isEmpty {
                         break
                     }
-                    responseString += line
+                    requestBody += line
                 }
-                println(">> responseString : \(responseString)")
-                let responseData = responseString.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: true)
-                return HttpRequest(url: path, method: method, headers: headers, responseData: responseData)
+                println(">> requestBody : \(requestBody)")
+                let body = requestBody.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: true)
+                return HttpRequest(url: path, method: method, headers: headers, body: body, capturedUrlGroups: [])
             }
         }
         return nil
     }
     
     // 返回 HTTP 请求的 header 信息
-    func nextHeaders(socket: CInt, error:NSErrorPointer) -> Dictionary<String, String>? {
+    private func nextHeaders(socket: CInt, error:NSErrorPointer) -> Dictionary<String, String>? {
         var headers = Dictionary<String, String>()
         while let headerLine = nextLine(socket, error: error) {
             if ( headerLine.isEmpty ) {
@@ -70,7 +69,7 @@ class HttpParser {
     var recvBufferSize: Int = 0
     var recvBufferOffset: Int = 0
     
-    func nextUInt8(socket: CInt) -> Int {
+    private func nextUInt8(socket: CInt) -> Int {
         if ( recvBufferSize == 0 || recvBufferOffset == recvBuffer.count ) {
             recvBufferOffset = 0
             
@@ -83,7 +82,7 @@ class HttpParser {
             // flags : 是一个标志位可以是 0 或者一个组合。 
             // MSG_DONTWAIT 在 rece(), send() 表示使用非阻塞的方式读取和发送消息
             // Recv()返回实际上接收的字节数，当出现错误时，返回-1并置相应的errno值。
-            recvBufferSize = recv(socket, &recvBuffer, UInt(recvBuffer.count), MSG_DONTWAIT)
+            recvBufferSize = recv(socket, &recvBuffer, UInt(recvBuffer.count), 0)
             
             // 如果接收过程出现失败，则返回
             if ( recvBufferSize <= 0 ) { return recvBufferSize }
@@ -99,7 +98,7 @@ class HttpParser {
         return Int(returnValue)
     }
     
-    func nextLine(socket: CInt, error:NSErrorPointer) -> String? {
+    private func nextLine(socket: CInt, error:NSErrorPointer) -> String? {
         var characters: String = ""
         var n = 0
         do {
