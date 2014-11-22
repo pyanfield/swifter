@@ -8,7 +8,7 @@
 
 import Foundation
 
-let server = demoServer("~/")
+let server = demoServer(NSBundle.mainBundle().resourcePath)
 
 var error: NSError?
 

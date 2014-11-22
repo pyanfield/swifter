@@ -93,28 +93,38 @@ struct Socket {
         return s
     }
     
+    static func writeStringUTF8(socket: CInt, string: String, error: NSErrorPointer = nil) -> Bool {
+        if let nsdata = string.dataUsingEncoding(NSUTF8StringEncoding) {
+            writeData(socket, data: nsdata, error: error)
+        }
+        return true
+    }
+    
+    static func writeStringASCII(socket: CInt, string: String, error: NSErrorPointer = nil) -> Bool {
+        if let nsdata = string.dataUsingEncoding(NSASCIIStringEncoding) {
+            writeData(socket, data: nsdata, error: error)
+        }
+        return true
+    }
+    
     // 向 socket 文件描述符中写入 string 信息
-    static func writeStringUTF8(socket: CInt, string: String, error:NSErrorPointer = nil) -> Bool {
-        println(">> Socket.writeStringUTF8: \(string)")
-        var sent = 0;
-        if let nsdata = string.dataUsingEncoding(NSUTF8StringEncoding)
-		{
-			let unsafePointer = UnsafePointer<UInt8>(nsdata.bytes)
-			while ( sent < nsdata.length ) {
-                // ssize_t write(int fildes, const void *buf, size_t nbyte);
-                // The write() function attempts to write nbyte bytes from the buffer pointed to by buf to the file associated with the open file descriptor, fildes.
-                // If nbyte is 0, write() will return 0 and have no other results if the file is a regular file; otherwise, the results are unspecified.
-                // Upon successful completion, write() and pwrite() will return the number of bytes actually written to the file associated with fildes. This number will never be greater than nbyte. Otherwise, -1 is returned and errno is set to indicate the error.
-                // Write 函数将 buf 中的 nbyte 字节内容写入到文件描述符中，成功返回写的字节数，失败返回-1.并设置errno 变量。
-                // write 的返回值大于0，表示写了部分数据或者是全部的数据，这样用一个while循环不断的写入数据，但是循环过程中的buf参数和nbytes参数是我们自己来更新的，也就是说，网络编程中写函数是不负责将全部数据写完之后再返回的，说不定中途就返回了！
-				let s = write(socket, unsafePointer + sent, UInt(nsdata.length - sent))
-				if ( s <= 0 ) {
-					if error != nil { error.memory = socketLastError("write(\(string)) failed.") }
-					return false
-				}
-				sent += s
-			}
-		}
+    static func writeData(socket: CInt, data: NSData, error:NSErrorPointer = nil) -> Bool {
+        var sent = 0
+        let unsafePointer = UnsafePointer<UInt8>(data.bytes)
+        while ( sent < data.length ) {
+            // ssize_t write(int fildes, const void *buf, size_t nbyte);
+            // The write() function attempts to write nbyte bytes from the buffer pointed to by buf to the file associated with the open file descriptor, fildes.
+            // If nbyte is 0, write() will return 0 and have no other results if the file is a regular file; otherwise, the results are unspecified.
+            // Upon successful completion, write() and pwrite() will return the number of bytes actually written to the file associated with fildes. This number will never be greater than nbyte. Otherwise, -1 is returned and errno is set to indicate the error.
+            // Write 函数将 buf 中的 nbyte 字节内容写入到文件描述符中，成功返回写的字节数，失败返回-1.并设置errno 变量。
+            // write 的返回值大于0，表示写了部分数据或者是全部的数据，这样用一个while循环不断的写入数据，但是循环过程中的buf参数和nbytes参数是我们自己来更新的，也就是说，网络编程中写函数是不负责将全部数据写完之后再返回的，说不定中途就返回了！
+            let s = write(socket, unsafePointer + sent, UInt(data.length - sent))
+            if ( s <= 0 ) {
+                if error != nil { error.memory = socketLastError("write(...) failed.") }
+                return false
+            }
+            sent += s
+        }
         return true
     }
     

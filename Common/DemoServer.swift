@@ -13,21 +13,25 @@ func demoServer(publicDir: String?) -> HttpServer {
     if let publicDir = publicDir {
         server["/resources/(.+)"] = HttpHandlers.directory(publicDir)
     }
+    server["/files(.+)"] = HttpHandlers.directoryBrowser("~/")
+    server["/magic"] = { .OK(.HTML("You asked for " + $0.url)) }
     server["/test"] = { request in
         var headersInfo = ""
         for (name, value) in request.headers {
             headersInfo += "\(name) : \(value)<br>"
         }
-        let response = "<html><body>Url: \(request.url)<br>Method: \(request.method)<br>\(headersInfo)</body></html>"
-        return .OK(.RAW(response))
+        var queryParamsInfo = ""
+        for (name, value) in request.urlParams {
+            queryParamsInfo += "\(name) : \(value)<br>"
+        }
+        return .OK(.HTML("<h3>Url:</h3> \(request.url)<h3>Method: \(request.method)</h3><h3>Headers:</h3>\(headersInfo)<h3>Query:</h3>\(queryParamsInfo)"))
     }
     server["/params/(.+)/(.+)"] = { request in
         var capturedGroups = ""
         for (index, group) in enumerate(request.capturedUrlGroups) {
             capturedGroups += "Expression group \(index) : \(group)<br>"
         }
-        let response = "<html><body>Url: \(request.url)<br>Method: \(request.method)<br>\(capturedGroups)</body></html>"
-        return .OK(.RAW(response))
+        return .OK(.HTML("Url: \(request.url)<br>Method: \(request.method)<br>\(capturedGroups)"))
     }
     server["/json"] = { request in
         return .OK(.JSON(["posts" : [[ "id" : 1, "message" : "hello world"],[ "id" : 2, "message" : "sample message"]], "new_updates" : false]))
@@ -38,20 +42,43 @@ func demoServer(publicDir: String?) -> HttpServer {
     server["/long"] = { request in
         var longResponse = ""
         for k in 0..<1000 { longResponse += "(\(k)),->" }
-        return .OK(.RAW(longResponse))
+        return .OK(.HTML(longResponse))
     }
     server["/demo"] = { request in
-        return .OK(.RAW("<html><body><center><h2>Hello Swift</h2>" +
+        return .OK(.HTML("<center><h2>Hello Swift</h2>" +
             "<img src=\"https://devimages.apple.com.edgekey.net/swift/images/swift-hero_2x.png\"/><br>" +
-            "</center></body></html>"))
+            "</center>"))
+    }
+    server["/login"] = { request in
+        switch request.method.uppercaseString {
+            case "GET":
+                if let rootDir = publicDir {
+                    if let html = NSData(contentsOfFile:"\(rootDir)/login.html") {
+                        return .RAW(200, html)
+                    } else {
+                        return .NotFound
+                    }
+                }
+                break;
+            case "POST":
+                if let body = request.body {
+                    return .OK(.HTML(body))
+                } else {
+                    return .OK(.HTML("No POST params."))
+            }
+            default:
+                return .NotFound
+        }
+        return .NotFound
     }
     server["/"] = { request in
-        var listPage = "<html><body>Available services:<br><ul>"
+        var listPage = "Available services:<br><ul>"
+        enumerate(server.routes())
         for item in server.routes() {
             listPage += "<li><a href=\"\(item)\">\(item)</a></li>"
         }
-        listPage += "</ul></body></html>"
-        return .OK(.RAW(listPage))
+        listPage += "</ul>"
+        return .OK(.HTML(listPage))
     }
     return server
 }

@@ -13,6 +13,7 @@ enum HttpResponseBody {
     case JSON(AnyObject)
     case XML(AnyObject)
     case PLIST(AnyObject)
+    case HTML(String)
     case RAW(String)
     
     func data() -> String? {
@@ -38,8 +39,10 @@ enum HttpResponseBody {
                 return "Serialisation error: \(serializationError)"
             }
             return "Invalid object to serialise."
-        case .RAW(let data):
-            return data
+        case .RAW(let body):
+            return body
+        case .HTML(let body):
+            return "<html><body>\(body)</body></html>"
         }
     }
 }
@@ -51,7 +54,7 @@ enum HttpResponse {
     case MovedPermanently(String)
     case BadRequest, Unauthorized, Forbidden, NotFound
     case InternalServerError
-    case Raw(Int,String)
+    case RAW(Int, NSData)
     
     func statusCode() -> Int {
         switch self {
@@ -64,7 +67,7 @@ enum HttpResponse {
         case .Forbidden             : return 403
         case .NotFound              : return 404
         case .InternalServerError   : return 500
-        case .Raw(let code, _)      : return code
+        case .RAW(let code, _)      : return code
         }
     }
     
@@ -79,23 +82,27 @@ enum HttpResponse {
         case .Forbidden             : return "Forbidden"
         case .NotFound              : return "Not Found"
         case .InternalServerError   : return "Internal Server Error"
-        case .Raw(_,_)              : return "Custom"
+        case .RAW(_,_)              : return "Custom"
         }
     }
     
     // 当枚举类型是 .MovedPermanently 的时候，设置 header 的 Location 信息
     // 其他情况下不做任何处理
-    func headers() -> Dictionary<String, String> {
+    func headers() -> [String: String] {
+        var headers = [String:String]()
+        headers["Server"] = "Swifter"
         switch self {
-        case .MovedPermanently(let location) : return [ "Location" : location ]
-        default: return Dictionary()
+        case .MovedPermanently(let location) : headers["Location"] = location
+        default:[];
         }
+        return headers
     }
     
     // 当请求成功的时候，返回响应的数据
-    func body() -> String? {
+    func body() -> NSData? {
         switch self {
-        case .OK(let body)      : return body.data()
+        case .OK(let body)      : return body.data()?.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)
+        case .RAW(_, let data)  : return data
         default                 : return nil
         }
     }

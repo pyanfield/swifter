@@ -25,21 +25,50 @@ class HttpParser {
             }
             let method = statusTokens[0]
             let path = statusTokens[1]
+            let urlParams = extractUrlParams(path)
+            // TODO extract query parameters
             if let headers = nextHeaders(socket, error: error) {
-                println(">> headers : \(headers)")
-                var requestBody = ""
-                while let line = nextLine(socket, error: error) {
-                    if line.isEmpty {
-                        break
-                    }
-                    requestBody += line
+                // TODO detect content-type and handle:
+                // 'application/x-www-form-urlencoded' -> Dictionary
+                // 'multipart' -> Dictionary
+                if let contentSize = headers["content-length"]?.toInt() {
+                    let body = nextBody(socket, size: contentSize, error: error)
+                    return HttpRequest(url: path, urlParams: urlParams, method: method, headers: headers, body: body, capturedUrlGroups: [])
                 }
-                println(">> requestBody : \(requestBody)")
-                let body = requestBody.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: true)
-                return HttpRequest(url: path, method: method, headers: headers, body: body, capturedUrlGroups: [])
+                return HttpRequest(url: path, urlParams: urlParams, method: method, headers: headers, body: nil, capturedUrlGroups: [])
             }
         }
         return nil
+    }
+
+    private func extractUrlParams(url: String) -> [(String, String)] {
+        if let query = split(url, { $0 == "?" }).last {
+            return map(split(query, { $0 == "&" }), { (param:String) -> (String, String) in
+                let tokens = split(param, { $0 == "=" })
+                if tokens.count >= 2 {
+                    let key = tokens[0].stringByRemovingPercentEncoding
+                    let value = tokens[1].stringByRemovingPercentEncoding
+                    if key != nil && value != nil { return (key!, value!) }
+                }
+                return ("","")
+            })
+        }
+        return []
+    }
+    
+    private func nextBody(socket: CInt, size: Int , error:NSErrorPointer) -> String? {
+        var body = ""
+        var counter = 0;
+        while ( counter < size ) {
+            let c = nextUInt8(socket)
+            if ( c < 0 ) {
+                if error != nil { error.memory = HttpParser.err("IO error while reading body") }
+                return nil
+            }
+            body.append(UnicodeScalar(c))
+            counter++;
+        }
+        return body
     }
     
     // 返回 HTTP 请求的 header 信息
@@ -55,7 +84,7 @@ class HttpParser {
                 // "Each header field consists of a name followed by a colon (":") and the field value. Field names are case-insensitive."
                 // We can keep lower case version.
                 let headerName = headerTokens[0].lowercaseString
-                let headerValue = headerTokens[1]
+                let headerValue = headerTokens[1].stringByTrimmingCharactersInSet(NSCharacterSet.whitespaceAndNewlineCharacterSet())
                 if ( !headerName.isEmpty && !headerValue.isEmpty ) {
                     headers.updateValue(headerValue, forKey: headerName)
                 }
@@ -63,39 +92,22 @@ class HttpParser {
         }
         return nil
     }
-    
-    // 初始化一个含有 1024 个元素的 UInt8 数组，每个元素的值为 0
-    var recvBuffer = [UInt8](count: 1024, repeatedValue: 0)
-    var recvBufferSize: Int = 0
-    var recvBufferOffset: Int = 0
-    
+
     private func nextUInt8(socket: CInt) -> Int {
-        if ( recvBufferSize == 0 || recvBufferOffset == recvBuffer.count ) {
-            recvBufferOffset = 0
-            
-            // ssize_t recv(int socket, void *buffer, size_t length, int flags);
-            // receive a message from a connected socket
-            // 从连接的 socket 上接收信息
-            // socket : 是接受数据的socket描述符；
-            // buffer : 是存放接收数据的缓冲区；
-            // length : 是缓冲的长度；
-            // flags : 是一个标志位可以是 0 或者一个组合。 
-            // MSG_DONTWAIT 在 rece(), send() 表示使用非阻塞的方式读取和发送消息
-            // Recv()返回实际上接收的字节数，当出现错误时，返回-1并置相应的errno值。
-            recvBufferSize = recv(socket, &recvBuffer, UInt(recvBuffer.count), 0)
-            
-            // 如果接收过程出现失败，则返回
-            if ( recvBufferSize <= 0 ) { return recvBufferSize }
-            
-            // 如果实际接收的字节数小于接收数据缓冲区的大小，则将缓冲区的其它数值置 0
-            if recvBufferSize < recvBuffer.count
-            {
-                recvBuffer[recvBufferSize] = 0
-            }
-        }
-        let returnValue = recvBuffer[recvBufferOffset]
-        recvBufferOffset++
-        return Int(returnValue)
+        var buffer = [UInt8](count: 1, repeatedValue: 0);
+        // ssize_t recv(int socket, void *buffer, size_t length, int flags);
+        // receive a message from a connected socket
+        // 从连接的 socket 上接收信息
+        // socket : 是接受数据的socket描述符；
+        // buffer : 是存放接收数据的缓冲区；
+        // length : 是缓冲的长度；
+        // flags : 是一个标志位可以是 0 或者一个组合。
+        // MSG_DONTWAIT 在 rece(), send() 表示使用非阻塞的方式读取和发送消息
+        // Recv()返回实际上接收的字节数，当出现错误时，返回-1并置相应的errno值。
+        let next = recv(socket, &buffer, UInt(buffer.count), 0)
+        // 如果接收过程出现失败，则返回
+        if next <= 0 { return next }
+        return Int(buffer[0])
     }
     
     private func nextLine(socket: CInt, error:NSErrorPointer) -> String? {
